@@ -1,0 +1,83 @@
+#!/usr/bin/perl -T
+
+use strict;
+use IO::File;
+use Getopt::Long;
+use Mail::SpamAssassin::Util qw(untaint_var exit_status_str
+                                am_running_on_windows);
+
+use lib '.';
+use Surgat::Server;
+use Surgat::Configuration;
+
+sub print_usage_and_exit {
+    my ( $message, $exitval ) = (@_);
+
+    if ($exitval == 0) {
+        print_version();
+        print("\n");
+    }
+    print "\n$message\n";
+
+    Surgat::Configuration::print_configuration_options();
+    exit($exitval);
+}
+
+sub print_version {
+    print << "EOF";
+
+Surgat - a minor demon who opens all locks
+
+EOF
+    printf("    Perl         : %s\n", join(".", map { $_||=0; $_*1 } ($] =~ /(\d)\.(\d{3})(\d{3})?/)));
+    printf("    SpamAssassin : %s\n", Mail::SpamAssassin::Version());
+    print "\n";
+}
+
+# am_running_in_taint_mode is not exported from SpamAssassin::Util
+Mail::SpamAssassin::Util::am_running_in_taint_mode();
+
+# clean_path_in_taint_mode is not exported from SpamAssassin::Util
+Mail::SpamAssassin::Util::clean_path_in_taint_mode();
+untaint_var( \%ENV );
+
+# The zeroth argument will be replaced in daemonize().
+my $ORIG_ARG0 = untaint_var($0);
+# Getopt::Long clears all arguments it processed (untaint both @ARGVs here!)
+my @ORIG_ARGV = untaint_var( \@ARGV );
+
+# daemonize() switches to the root later on and we need to come back here
+# somehow -- untaint the dir to be on the safe side.
+my $ORIG_CWD = untaint_var( Cwd::cwd() );
+
+my $config = Surgat::Configuration->new();
+print_usage_and_exit() unless $config->{result} == 1;
+$config->sanity_check();
+
+if ($config->{'help'}) {
+    print_usage_and_exit(qq{Available configuration options\n}, 0);
+}
+if ($config->{'version'}) {
+    print_version();
+    exit(0);
+}
+
+if ($config->{'lint'}) {
+    $config->{'log-level'} = 4;
+    $config->{'debug'} = 'all';
+    my $st = Surgat::Spamtest->new($config);
+    print "Performing Spamassassin lint check on configuration...\n\n";
+    my $ck = $st->lint();
+    print "\nLint results: ".($ck ? "Failed" : "OK")."\n\n";
+    exit(0);
+}
+
+if ($config->{'log-level'} >= 3) {
+    $config->print_options();
+}
+
+my $server = Surgat::Server->new($config);
+$server->run();
+
+exit 1;
+
