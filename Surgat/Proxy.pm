@@ -91,16 +91,8 @@ sub read_data {
     } else {
         $self->{data} = IO::File->new_tmpfile;
     }
-    my $data_size = 0;
     $self->change_state('Reading data');
     while (defined(my $line = $self->_recv(IN))) {
-#        do_log(4, "read ".length($line)." bytes from inbound socket");
-        # When attempting to count the size of data accepted, we need
-        # to ignore the final .\r\n sequence and also any "double dots"
-        # added.
-        $data_size += length($line) unless $line =~ /^\.\r\n/;
-        # "Uncount" a double dot character...
-        $data_size-- if length($line) > 3 && $line =~ /^\./;
         last if $line =~ /^\.\r\n/;
         if (!$self->{data}->print($line)) {
             do_log(0, "Error printing data to temporary file");
@@ -108,19 +100,14 @@ sub read_data {
         }
     }
 
-    if ($self->{size} && $data_size != $self->{size}) {
-        # presently just record this, but should we abort here?
-        do_log(1, "Data size differs from expected! Expected ".$self->{size}." but got $data_size");
-    }
-
     $self->change_state('Data received');
-    $self->_send(IN, "250 2.0.0 Ok: message accepted for processing");
-    # We should check whether the client has sent an immediate QUIT in
-    # response and close the connection here, minimising the time the
-    # connection is open for.
-
-
     return 1;
+}
+
+sub accept_message {
+    my $self = shift;
+    $self->change_state('Message accepted');
+    $self->_send(IN, "250 2.0.0 Ok: message has been processed");
 }
 
 sub temporary_defer {
@@ -182,6 +169,7 @@ sub process_message {
 
 sub finish {
     my $self = shift;
+    # todo - If insock is still open, we should close it here.
     $self->{outsock}->close;
     $self->{data}->close if defined $self->{data};
     $self->{spamtest}->finish();

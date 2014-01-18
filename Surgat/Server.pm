@@ -17,7 +17,6 @@ sub new {
 
     my $srv = $self->{'server'} ||= {};
 
-    # Only support IPv4 at present...
     $self->{config} = $config;
     $srv->{ipv} = $config->{'ipv4-only'} ? 4 : '*';
     $self->{timeout} = $config->{'timeout'};
@@ -55,6 +54,9 @@ sub new {
     $self->{state} = 'started';
     $self->{children} = 0;
 
+    # Record some stuff into the logfile that's good to know during development
+    do_log(2, "Using SQL for SpamAssassin settings") if $config->{'sql-config'};
+
     # bless ourselves, then return
     bless($self, $class);
     return $self;
@@ -83,8 +85,7 @@ sub process_request {
     my $self = shift;
     eval {
     	local $SIG{ALRM} = sub { die "Child server process timed out!\n" };
-#	    my $timeout = $self->{timeout};
-	    alarm($self->{timeout});
+        alarm($self->{timeout});
 
         my $p = Surgat::Proxy->new($self->{server}->{client}, $self->{config}, $self->{spamtest});
         unless ($p->start()) { die "$0: Unable to establish proxy connection: $!"; }
@@ -101,13 +102,11 @@ sub process_request {
         
         if (! $p->process_message()) {
             $p->temporary_defer();
-            $p->finish();
-            die("Error processing the mail message: $!");
+        } else {
+            $p->accept_message();
         }
-
         $p->process_commands();
         $p->finish();
-#        alarm($timeout);
     };
     alarm(0);
     # The eval block will "hide" any errors, so check if all went OK and record

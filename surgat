@@ -6,7 +6,11 @@ use Getopt::Long;
 use Mail::SpamAssassin::Util qw(untaint_var exit_status_str
                                 am_running_on_windows);
 
-use lib '.';
+
+# Hack to allow development without installation
+use File::Basename;
+use lib dirname(__FILE__);
+
 use Surgat::Server;
 use Surgat::Configuration;
 

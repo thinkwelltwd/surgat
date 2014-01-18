@@ -195,6 +195,8 @@ sub process {
     # Quick fix - skip the first header and use the second.
     if (scalar @recd >= 1 && $recd[0] =~ /for \<(.*)\>;/is) {
         $self->set_user($1);
+    } else {
+        $self->set_user($self->{default_user});
     }
 
     do_log(2, "processing message $msgid".($rmsgid ? " aka $rmsgid" : "")
@@ -291,11 +293,13 @@ sub parse_msgids {
 sub set_user {
     my ($self, $user) = @_;
 
+    do_log(2, "trying to set user to '$user'");
+
     if ($user !~ /^([\x20-\xFF]*)$/ ) {
         do_log(2, "Username contains control chars??? [$user]");
+        $self->{current_user} = $self->{default_user};
         return 0;
     }
-    do_log(3, "setting user to '$user'");
     $self->{current_user} = $user;
 
     if ($self->{'nouser-config'}) {
