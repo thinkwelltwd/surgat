@@ -172,7 +172,7 @@ sub process {
 
     $self->{msg_count}++;
     do_log(3, "started processing message ".$self->{msg_count}.
-              "/".$self->{max_msg_count}." @ $start_time");
+              "/".$self->{max_msg_count}." @ $start_time for $user");
 
     $msg->seek(0,0);
     my $size = ($msg->stat)[7] or die "Can't stat mail file: $!";
@@ -188,16 +188,7 @@ sub process {
     my ($mail, $actual_length) = $self->parse_file($msg, $start_time);
     my ($msgid, $rmsgid) = $self->parse_msgids($mail);
 
-    my @recd = $mail->get_pristine_header("Received");
-    do_log(4, "got a total of ".(scalar @recd)." headers to parse for recipient...");
-    # As the message has been delievered to us, the first Received header will
-    # record that delivery and as such won't tell us who it was intended for!
-    # Quick fix - skip the first header and use the second.
-    if (scalar @recd >= 1 && $recd[0] =~ /for \<(.*)\>;/is) {
-        $self->set_user($1);
-    } else {
-        $self->set_user($self->{default_user});
-    }
+    $self->set_user($user);
 
     do_log(2, "processing message $msgid".($rmsgid ? " aka $rmsgid" : "")
        . " for ".$self->{current_user}." : $>");
@@ -433,13 +424,14 @@ sub handle_user_setuid_basic {
       am_running_on_windows() ? ('nobody') : getpwnam($suidto);
 
     if (!defined $uid) {
-        my $errmsg = "handle_user unable to find user: '$suidto'\n";
+        my $errmsg = "handle_user_setuid_basic: unable to find user: '$suidto'\n";
         die $errmsg if $self->{sa_obj}->{'paranoid'};
         # if we are given a username, but can't look it up, maybe name
         # services are down?  let's break out here to allow them to get
         # 'defaults' when we are not running paranoid
         do_log(2, $errmsg);
-        return 0;
+        do_log(2, "Falling back to default user");
+        return $self->set_user($self->{default_user});
     }
 
     if ($self->{setuid_to_user}) {

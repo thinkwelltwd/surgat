@@ -41,7 +41,7 @@ sub format_msg {
     my ($caller, $level, $msg) = @_;
     $msg =~ s/\%/%%/g;
     my $rv = sprintf("%s: %s: %s", $caller, $level, $msg);
-#    $rv = sprintf("%s %s", get_datetime, $rv) unless $syslog;
+    $rv = sprintf("%s %s", get_datetime, $rv) unless $syslog;
     return $rv;
 }
 

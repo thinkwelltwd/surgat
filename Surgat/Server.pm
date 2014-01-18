@@ -99,7 +99,7 @@ sub process_request {
             $p->finish();
             die("Error reading mail from connection: $!");
         }
-        
+
         if (! $p->process_message()) {
             $p->temporary_defer();
         } else {

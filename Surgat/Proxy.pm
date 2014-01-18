@@ -18,7 +18,8 @@ sub new {
 
     my $self = {insock => $socket, 
                 spamtest => $spamtest, 
-                state => 'created'};  
+                state => 'created',
+                recipients => ()};
     bless($self, $class);
 
     # todo - allow for lmtp connections here...
@@ -56,6 +57,9 @@ sub process_commands {
         # Sending a second size statement is not permitted - should
         # we check?
         $self->{size} = $1 if $cmd=~/SIZE=([0-9]+)/;
+#:<david@X201> ORCPT=rfc822;david
+        push(@{$self->{recipients}}, $1) if $cmd =~ /rcpt to:\<(.*)\>/i;
+        do_log(4, $cmd) if $cmd =~ /rcpt to/i;
 
         if ($cmd =~ /QUIT/i) {
             # Presently, there is a chance that the connection will have
@@ -78,7 +82,7 @@ sub process_commands {
         last if $code == 354;
         next unless $code == 250;
     }
-
+    do_log(4, $self->{recipients}."\n");
     return 1;
 }
 
@@ -86,6 +90,8 @@ sub read_data {
     my $self = shift;
     if (defined($self->{data})) {
         # pipelining?
+        # todo - there is a chance we could loose data here,
+        # so what should we do?
         $self->{data}->seek(0, 0);
 	    $self->{data}->truncate(0);
     } else {
@@ -99,7 +105,6 @@ sub read_data {
             return 0;
         }
     }
-
     $self->change_state('Data received');
     return 1;
 }
@@ -129,8 +134,8 @@ sub send_data {
     local ($/) = "\r\n";
     $self->{outsock}->autoflush(0);
     while (<$data>) {
-	  s/^\./../;
-	  $self->{outsock}->print($_) or return 0;
+        s/^\./../;
+        $self->{outsock}->print($_) or return 0;
     }
     $self->{outsock}->autoflush(1);
     $self->{outsock}->print(".\r\n") or return 0;
@@ -144,9 +149,15 @@ sub process_message {
     $self->change_state("processing message");
     return 0 unless defined $self->{data};
 
-    # Process the message via spamtest. It will be rewound as required
-    # by spamtest
-    my $result = $self->{spamtest}->process($self->{data});
+    # Process the message via spamtest. We hope to be called on a
+    # 1-1 basis, but if default_destination_recipient_limit  is not set
+    # to 1 then we'll possibly end up with multiple recipients. At this
+    # stage we have already passed on the recipients to the outgoing end
+    # of the proxy, so we'll just process using the spam settings for
+    # the first recipient.
+    # NB This assumes we have recipients!
+    my $rcpt = pop(@{$self->{recipients}});
+    my $result = $self->{spamtest}->process($self->{data}, $rcpt);
     $self->change_state("message processing result: $result");
 
     # 3 results possible...
