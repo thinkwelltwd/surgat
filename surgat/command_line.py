@@ -5,6 +5,7 @@ import ConfigParser
 import asyncore
 import pprint
 
+from replay import ReplayMessage
 from surgat import SurgatMailServer
 
 
@@ -75,3 +76,15 @@ def main():
         asyncore.loop()
     except KeyboardInterrupt:
         pass
+
+
+def replay():
+    parser = argparse.ArgumentParser(description='surgat replay message script')
+    parser.add_argument('file', action='store', nargs='*', help='Files to process')
+    args = parser.parse_args()
+
+    for fn in args.file:
+        rm = ReplayMessage(fn)
+        if not rm.is_valid or not rm.process():
+            continue
+

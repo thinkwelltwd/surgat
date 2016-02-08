@@ -67,12 +67,10 @@ class SurgatMailServer(SMTPServer):
             self.queue.task_done()
             print("Processing {} byte message from {} to {}".format(len(msg[3]), msg[1], msg[2]))
 
-            self.store_msg(msg[3])
-
             spam_opts['user'] = msg[2]
             cx = SAConnector(**spam_opts)
-            body = msg[3]
 
+            body = msg[3]
             if cx.check_ping():
                 rv = cx.check(msg[3])
                 pprint.pprint(rv)
@@ -88,9 +86,13 @@ class SurgatMailServer(SMTPServer):
             else:
                 if self.config.get('forward_on_error', False) is False:
                     print("Unable to connect to spamd, skipping this message...")
+                    self.store_msg(msg[3])
                     continue
 
-            print(body)
-            server = smtplib.SMTP(*self.config['forward'])
-            server.sendmail(msg[1], msg[2], body)
-            server.quit()
+            try:
+                server = smtplib.SMTP(*self.config['forward'])
+                server.sendmail(msg[1], msg[2], body)
+                server.quit()
+            except:
+                print("Unable to forward message, stored...")
+                self.store_msg(body)

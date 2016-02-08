@@ -34,7 +34,8 @@ setup(
     packages=find_packages(exclude=['tests']),
     test_suite='tests',
     entry_points={
-        'console_scripts': ['surgat=surgat.command_line:main']
+        'console_scripts': ['surgat=surgat.command_line:main',
+                            'surgat-replay=surgat.command_line:replay']
     },
 )
 

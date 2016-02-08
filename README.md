@@ -14,13 +14,13 @@ Postfix Configuration
 The proxy is intended to sit between incoming messages and their onward
 delivery, whether to local or remote destinations.
 
-  +--------------+       +--------------+       +--------------+
-  |              |       |              |       |              |
-  | incoming     | ----> | surgat       | ----> | outgoing     |
-  |      mail    |       |              |       |      mail    |
-  |              |       |              |       |              |
-  +--------------+       +--------------+       +--------------+
-    *:25                 localhost:10025        localhost:10026
+    +--------------+       +--------------+       +--------------+
+    |              |       |              |       |              |
+    | incoming     | ----> | surgat       | ----> | outgoing     |
+    |      mail    |       |              |       |      mail    |
+    |              |       |              |       |              |
+    +--------------+       +--------------+       +--------------+
+      *:25                 localhost:10025        localhost:10026
 
 By default surgat is ocnfigured to listen on port 10025 and connect to
 port 10026, on localhost only.
@@ -35,5 +35,5 @@ Updates
 -------
 - 8th Feb 2016
 
-Following a change in how the mail setup I look after is configured, I decided to rewrite this in Python as it's the language I spend time with now, making the maintenance far easier. Additionally I've moved away from all the "magic" spamd perl code and now use the spamc module to process messages via spamd. This provides imporoved results that are more predictable and consistent.
+Following a change in how the mail setup I look after is configured, I decided to rewrite this in Python as it's the language I spend time with now, making the maintenance far easier. Additionally I've moved away from all the "magic" spamd perl code and now use the spamc module to process messages via spamd. This provides improved results that are more predictable and consistent.
 
