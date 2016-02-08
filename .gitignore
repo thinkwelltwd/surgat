@@ -19,4 +19,5 @@ test.py
 *.pyc
 store
 .idea
+*.egg-info
 
