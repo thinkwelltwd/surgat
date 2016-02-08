@@ -1,58 +1,18 @@
-import asyncore
 from smtpd import SMTPServer
 import pprint
 import smtplib
-import spamc
 import os
-import argparse
-import ConfigParser
-import sys
 import Queue
 from threading import Thread, Lock
 import logging
 
-
-def spamd_headers_for_message(data):
-    rv = []
-    for k in data.get('headers', []):
-        if not k.startswith('X-Spam'):
-            continue
-        if not data.get('isspam', False) and k not in ['X-Spam-Status', 'X-Spam-Checker-Version']:
-            print("Skipping {} as not spam...".format(k))
-            continue
-        rv.append('{}: {}'.format(k, data['headers'][k]))
-    return rv
-
-
-class SAConnector(object):
-    def __init__(self, server='localhost', port=783, user=None):
-        """ A connection to spamd for the prvided user. """
-        self.client = spamc.SpamC(server, port, user=user)
-
-    def check_ping(self):
-        try:
-            self.client.ping()
-        except spamc.exceptions.SpamCError:
-            return False
-        return True
-
-    def check(self, msg):
-        """ Actually do the check of the message.
-        :param msg: Message body to check...
-        :return: {'result': True/False, 'headers': spam-headers, 'basescore': n.n, 'score': n.n}
-        """
-        ck = self.client.headers(msg)
-        pprint.pprint(ck)
-        return {'result': True if ck.get('isspam', False) else False,
-                'basescore': ck.get('basescore'),
-                'score': ck.get('score'),
-                'headers': spamd_headers_for_message(ck)}
+from connector import SAConnector
 
 
 class SurgatMailServer(SMTPServer):
     MAX_BACKLOG = 5
 
-    def __init__(self, cfg_dict): #localaddr, remoteaddr):
+    def __init__(self, cfg_dict):
         SMTPServer.__init__(self, cfg_dict['local'], None)
         self.config = cfg_dict
         self.queue = Queue.Queue(cfg_dict['threads'] * self.MAX_BACKLOG)
@@ -133,72 +93,3 @@ class SurgatMailServer(SMTPServer):
             server = smtplib.SMTP(self.config['forward'])
             server.sendmail(msg[1], msg[2], body)
             server.quit()
-
-
-def config_dict_from_parser(cfg):
-    cfg_dict = {}
-    OPTS = {
-        'local': [('Listen', 'hostname', 'localhost'),
-                  ('Listen', 'port', 10025, 'int')],
-        'forward': [('Forward', 'hostname', 'localhost'),
-                    ('Forward', 'port', 10026, 'int')],
-        'threads': ('General', 'threads', 5, 'int'),
-        'kill_level': ('General', 'kill_level', 50, 'int'),
-        'max_size': ('General', 'max_size', 10000, 'int'),
-        'store_directory': ('General', 'store_directory', None),
-        'forward_on_error': ('General', 'forward_on_error', False)
-    }
-
-    def get_opt_or_default(cfg, opt):
-        if not cfg.has_section(opt[0]):
-            return opt[2]
-        if not cfg.has_option(opt[0], opt[1]):
-            return opt[2]
-        v = cfg.get(opt[0], opt[1])
-        if len(opt) > 3 and opt[3] == 'int':
-            return int(v)
-        return v
-
-    for k in OPTS:
-        val = OPTS[k]
-        if type(val) is list:
-            cfg_dict[k] = tuple([get_opt_or_default(cfg, x) for x in val])
-        else:
-            cfg_dict[k] = get_opt_or_default(cfg, val)
-        if cfg_dict[k] is None:
-            del(cfg_dict[k])
-
-    if cfg.has_section('Spamd'):
-        cfg_dict['spamd'] = {}
-        for opt in cfg.options('Spamd'):
-            v = cfg.get('Spamd', opt)
-            if v.isdigit():
-                v = int(v)
-            cfg_dict['spamd'][opt] = v
-
-    return cfg_dict
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='surgat Spamassassin Proxy server')
-    parser.add_argument('--config', action='store', default='/usr/local/etc/surgat.conf',
-                        help='Configuration file to use')
-    args = parser.parse_args()
-
-    if not os.path.exists(args.config):
-        print("The config file '{}' does not exist. Unable to continue.".format(args.config))
-        sys.exit(0)
-
-    config = ConfigParser.ConfigParser()
-    config.read(args.config)
-    cfg_data = config_dict_from_parser(config)
-    cfg_data['cfg_fn'] = args.config
-
-    pprint.pprint(cfg_data)
-
-    sms = SurgatMailServer(cfg_data)
-    sms.start()
-    try:
-        asyncore.loop()
-    except KeyboardInterrupt:
-        pass

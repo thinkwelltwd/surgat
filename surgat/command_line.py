@@ -1,9 +1,55 @@
 import argparse
-import logging
 import os
 import sys
-from surgat import SurgatMailServer
 import ConfigParser
+import asyncore
+import pprint
+
+from surgat import SurgatMailServer
+
+
+def config_dict_from_parser(cfg):
+    cfg_dict = {}
+    OPTS = {
+        'local': [('Listen', 'hostname', 'localhost'),
+                  ('Listen', 'port', 10025, 'int')],
+        'forward': [('Forward', 'hostname', 'localhost'),
+                    ('Forward', 'port', 10026, 'int')],
+        'threads': ('General', 'threads', 5, 'int'),
+        'kill_level': ('General', 'kill_level', 50, 'int'),
+        'max_size': ('General', 'max_size', 10000, 'int'),
+        'store_directory': ('General', 'store_directory', None),
+        'forward_on_error': ('General', 'forward_on_error', False)
+    }
+
+    def get_opt_or_default(cfg, opt):
+        if not cfg.has_section(opt[0]):
+            return opt[2]
+        if not cfg.has_option(opt[0], opt[1]):
+            return opt[2]
+        v = cfg.get(opt[0], opt[1])
+        if len(opt) > 3 and opt[3] == 'int':
+            return int(v)
+        return v
+
+    for k in OPTS:
+        val = OPTS[k]
+        if type(val) is list:
+            cfg_dict[k] = tuple([get_opt_or_default(cfg, x) for x in val])
+        else:
+            cfg_dict[k] = get_opt_or_default(cfg, val)
+        if cfg_dict[k] is None:
+            del(cfg_dict[k])
+
+    if cfg.has_section('Spamd'):
+        cfg_dict['spamd'] = {}
+        for opt in cfg.options('Spamd'):
+            v = cfg.get('Spamd', opt)
+            if v.isdigit():
+                v = int(v)
+            cfg_dict['spamd'][opt] = v
+
+    return cfg_dict
 
 
 def main():
