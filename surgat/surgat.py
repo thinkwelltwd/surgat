@@ -13,6 +13,7 @@ class SurgatMailServer(SMTPServer):
     MAX_BACKLOG = 5
 
     def __init__(self, cfg_dict):
+        print(cfg_dict['local'])
         SMTPServer.__init__(self, cfg_dict['local'], None)
         self.config = cfg_dict
         self.queue = Queue.Queue(cfg_dict['threads'] * self.MAX_BACKLOG)
@@ -90,6 +91,6 @@ class SurgatMailServer(SMTPServer):
                     continue
 
             print(body)
-            server = smtplib.SMTP(self.config['forward'])
+            server = smtplib.SMTP(*self.config['forward'])
             server.sendmail(msg[1], msg[2], body)
             server.quit()
