@@ -117,6 +117,7 @@ class SurgatMailServer(SMTPServer):
                 server = smtplib.SMTP(*self.config['forward'])
                 server.sendmail(msg[1], msg[2], body)
                 server.quit()
+                my_logger.info("message to {} forwarded".format(msg[2]))
             except:
-                my_logger.warn("Unable to forward message, stored...")
                 self.store_msg(body, True)
+                my_logger.warn("Unable to forward message, stored...")
