@@ -3,8 +3,8 @@ import os
 import sys
 import ConfigParser
 import asyncore
-import pprint
 
+from logs import get_surgat_logger
 from replay import ReplayMessage
 from surgat import SurgatMailServer
 
@@ -55,20 +55,24 @@ def config_dict_from_parser(cfg):
 
 def main():
     parser = argparse.ArgumentParser(description='surgat Spamassassin Proxy server')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--config', action='store', default='/usr/local/etc/surgat.conf',
                         help='Configuration file to use')
     args = parser.parse_args()
+
+    logger = get_surgat_logger('DEBUG' if args.verbose else 'INFO')
 
     if not os.path.exists(args.config):
         print("The config file '{}' does not exist. Unable to continue.".format(args.config))
         sys.exit(0)
 
+
+    logger.info("Starting surgat with configuration from {}".format(args.config))
+
     config = ConfigParser.ConfigParser()
     config.read(args.config)
     cfg_data = config_dict_from_parser(config)
     cfg_data['cfg_fn'] = args.config
-
-    pprint.pprint(cfg_data)
 
     sms = SurgatMailServer(cfg_data)
     sms.start()
@@ -76,6 +80,7 @@ def main():
         asyncore.loop()
     except KeyboardInterrupt:
         pass
+    logger.info("shutting down")
 
 
 def replay():
