@@ -95,7 +95,12 @@ def main():
     parser.add_argument('--collect-stats', action='store_true', help='Collect data on which rules are triggered')
     parser.add_argument('--config', action='store', default='/usr/local/etc/surgat.conf',
                         help='Configuration file to use')
+    parser.add_argument('--version', action='store_true', help='Show version and exit')
     args = parser.parse_args()
+
+    if args.version:
+        print("surgat version {}".format(__version__))
+        sys.exit(0)
 
     logger = get_surgat_logger('DEBUG' if args.verbose else 'INFO')
 
