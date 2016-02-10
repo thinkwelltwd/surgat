@@ -47,9 +47,7 @@ class SurgatMailServer(SMTPServer):
         if 'store_directory' not in self.config:
             return
         _dir = self.config['store_directory']
-        if not os.path.isabs(_dir):
-            _dir = os.path.join(os.path.abspath(os.path.dirname(self.config['cfg_fn'])), _dir)
-            logger.debug("Store Directory set to {}".format(_dir))
+        logger.debug("Store Directory set to {}".format(_dir))
         if not os.path.exists(_dir):
             os.makedirs(_dir)
         existing = glob(_dir + "/{}*".format(self.store_prefix))
@@ -60,7 +58,7 @@ class SurgatMailServer(SMTPServer):
                          format(self.store_sequence))
         self.config['store_directory'] = _dir
 
-    def store_msg(self, data, processed=False):
+    def store_msg(self, data, processed=False, filtered=False):
         if 'store_directory' not in self.config:
             return
         self.store_lock.acquire()
@@ -68,12 +66,28 @@ class SurgatMailServer(SMTPServer):
         if prefix != self.store_prefix:
             self.store_sequence = 0
             self.store_prefix = prefix
-        ext = '.eml' if processed else '.txt'
+        if (processed or filtered) is False:
+            ext = '.eml'
+        elif processed:
+            ext = '.txt'
+        elif filtered:
+            ext = '.saved'
         fn = os.path.join(self.config['store_directory'], "{}{}{}".format(prefix, self.store_sequence, ext))
         self.store_sequence += 1
         with open(fn, "wb") as fh:
             fh.write("{}\r\n".format(data))
         self.store_lock.release()
+
+    def is_filtered(self, spam, score, fromaddr):
+        if self.config.get('do_filter', False) is False:
+            return False
+        if spam:
+            return True
+        if score >= self.config.get('filter_above', 100):
+            return True
+        if fromaddr in self.config.get('filter_addresses', []):
+            return True
+        return False
 
     def message_checker(self, id):
         """ Run as a thread... """
@@ -98,7 +112,7 @@ class SurgatMailServer(SMTPServer):
                 my_logger.debug("spamd return code = {}".format(rv.get('code')))
 
                 if rv.get('isspam', False) is True:
-                    if rv.get('score') >= self.config['kill_level']:
+                    if 'kill_level' in self.config and rv.get('score') >= self.config['kill_level']:
                         my_logger.info("Dropping message to {} from {} due score of {}".
                                        format(msg[2], msg[1], rv.get("score")))
                         continue
@@ -106,6 +120,10 @@ class SurgatMailServer(SMTPServer):
 
                 if len(rv.get('headers', [])) > 0:
                     body = "\r\n".join(rv.get('headers', [])) + "\r\n" + body
+
+                if self.is_filtered(rv.get('result'), rv.get('score'), msg[1]):
+                    self.store_msg(body, False, True)
+
             else:
                 if self.config.get('forward_on_error', False) is False:
                     my_logger.warn("Unable to connect to spamd, storing the message")
@@ -113,6 +131,7 @@ class SurgatMailServer(SMTPServer):
                     continue
                 else:
                     my_logger.warn("Unable to contact spamd, but forwarding message due forward_on_error setting")
+
             try:
                 server = smtplib.SMTP(*self.config['forward'])
                 server.sendmail(msg[1], msg[2], body)
