@@ -37,5 +37,6 @@ setup(
         'console_scripts': ['surgat=surgat.command_line:main',
                             'surgat-replay=surgat.command_line:replay']
     },
+    install_requires = ['spamc']
 )
 

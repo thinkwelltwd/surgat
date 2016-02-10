@@ -85,7 +85,6 @@ def config_dict_from_parser(cfg_fn):
         cfg_dict['max_size'] = filesize(cfg_dict['max_size'])
     if 'store_directory' in cfg_dict:
         cfg_dict['store_directory'] = check_directory(cfg_fn, cfg_dict['store_directory'])
-    print(cfg_dict)
     return cfg_dict
 
 
@@ -93,6 +92,7 @@ def main():
     parser = argparse.ArgumentParser(description='surgat Spamassassin Proxy server')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--filter', action='store_true', help='Enable email filtering (for development)')
+    parser.add_argument('--collect-stats', action='store_true', help='Collect data on which rules are triggered')
     parser.add_argument('--config', action='store', default='/usr/local/etc/surgat.conf',
                         help='Configuration file to use')
     args = parser.parse_args()
@@ -106,8 +106,7 @@ def main():
     logger.info("Starting surgat version {} using configuration from {}".format(__version__, args.config))
 
     cfg_data = config_dict_from_parser(args.config)
-    cfg_data['cfg_fn'] = args.config
-    cfg_data['do_filter'] = args.filter
+    cfg_data.update({'cfg_fn': args.config, 'do_filter': args.filter, 'collect_stats': args.collect_stats})
 
     sms = SurgatMailServer(cfg_data)
     sms.start()

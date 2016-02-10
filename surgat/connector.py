@@ -34,8 +34,16 @@ class SAConnector(object):
         :return: {'result': True/False, 'headers': spam-headers, 'basescore': n.n, 'score': n.n}
         """
         ck = self.client.headers(msg)
+        if ck['code'] != 0:
+            return {'code': ck.get('code')}
         return {'result': True if ck.get('isspam', False) else False,
                 'basescore': ck.get('basescore'),
                 'code': ck.get('code'),
                 'score': ck.get('score'),
                 'headers': spamd_headers_for_message(ck)}
+
+    def rule_list(self, msg):
+        ck = self.client.symbols(msg)
+        if ck.get('code') == 0:
+            return ck.get('symbols')
+        return []

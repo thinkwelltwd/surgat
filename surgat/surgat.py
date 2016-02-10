@@ -9,6 +9,7 @@ from glob import glob
 from datetime import datetime
 
 from connector import SAConnector
+from stats import BeanCounter
 
 STORE_PREFIX_FORMAT = '%Y%m%d_'
 logger = logging.getLogger('surgat')
@@ -25,6 +26,7 @@ class SurgatMailServer(SMTPServer):
         self.store_lock = threading.Lock()
         self.store_prefix = datetime.today().strftime(STORE_PREFIX_FORMAT)
         self.store_sequence = 0
+        self.stats_q = None
 
     def process_message(self, peer, mailfrom, rcpttos, data):
         logger.debug("Received a message for processing")
@@ -42,6 +44,26 @@ class SurgatMailServer(SMTPServer):
             thd.daemon = True
             thd.start()
         logger.debug("{} thread(s) started...".format(self.config['threads']))
+
+        if self.config.get('collect_stats', False):
+            if 'stats_report_from' not in self.config:
+                logger.info("No stats_report_from configured, unable to enable statistics collection")
+                return
+            if 'stats_report_to' not in self.config:
+                logger.info("No stats_report_to configured, unable to enable statistics collection")
+                return
+
+            self.stats_q = Queue.Queue()
+            stats = BeanCounter(self.stats_q,
+                                self.config.get('stats_report_interval', 60),
+                                self.config['forward'],
+                                self.config['stats_report_from'],
+                                self.config['stats_report_to'])
+            thd = threading.Thread(target=stats.start)
+            thd.daemon = True
+            thd.start()
+            logger.info("Rule statistics will be reported every {} minutes".
+                        format(self.config.get('stats_report_interval', 60)))
 
     def check_store(self):
         if 'store_directory' not in self.config:
@@ -109,20 +131,31 @@ class SurgatMailServer(SMTPServer):
             body = msg[3]
             if cx.check_ping():
                 rv = cx.check(msg[3])
-                my_logger.debug("spamd return code = {}".format(rv.get('code')))
 
-                if rv.get('isspam', False) is True:
-                    if 'kill_level' in self.config and rv.get('score') >= self.config['kill_level']:
-                        my_logger.info("Dropping message to {} from {} due score of {}".
-                                       format(msg[2], msg[1], rv.get("score")))
+                if rv.get('code') == 0:
+                    if self.stats_q is not None:
+                        self.stats_q.put({'rules': cx.rule_list(msg[3])})
+
+                    if rv.get('isspam', False) is True:
+                        if 'kill_level' in self.config and rv.get('score') >= self.config['kill_level']:
+                            my_logger.info("Dropping message to {} from {} due score of {}".
+                                           format(msg[2], msg[1], rv.get("score")))
+                            continue
+                        # log rules here?
+
+                    if len(rv.get('headers', [])) > 0:
+                        body = "\r\n".join(rv.get('headers', [])) + "\r\n" + body
+
+                    if self.is_filtered(rv.get('result'), rv.get('score'), msg[1]):
+                        self.store_msg(body, False, True)
+                else:
+                    msg = "spamd error processing message (return code {}) - ".format(rv.get('code'))
+                    if self.config.get('forward_on_error', False) is False:
+                        my_logger.warn(msg + "message stored".
+                                       format(rv.get('code')))
+                        self.store_msg(msg[3])
                         continue
-                    # log rules here?
-
-                if len(rv.get('headers', [])) > 0:
-                    body = "\r\n".join(rv.get('headers', [])) + "\r\n" + body
-
-                if self.is_filtered(rv.get('result'), rv.get('score'), msg[1]):
-                    self.store_msg(body, False, True)
+                    my_logger.warn(msg + "forwarding message due forward_on_error set")
 
             else:
                 if self.config.get('forward_on_error', False) is False:

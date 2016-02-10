@@ -31,6 +31,12 @@ to the main.cf file for the incoming server.
     default_transport = smtp:[127.0.0.1]:10025
     default_destination_recipient_limit = 1
 
+Requirements
+------------
+This uses spamc from https://github.com/akissa/spamc
+
+To install, it's probably easiest to use pip.
+
 Updates
 -------
 - 8th Feb 2016
