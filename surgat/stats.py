@@ -19,7 +19,7 @@ class BeanCounter(object):
         self.report_due = datetime.today() + timedelta(minutes=report_interval)
 
     def start(self):
-        logger.info("BeanCounter starting collection. Report interval {}".format(self.report_interval))
+        logger.info("BeanCounter starting collection. Report interval {} minutes".format(self.report_interval))
         while True:
             try:
                 msg = self.queue.get(True, 10)
@@ -27,6 +27,7 @@ class BeanCounter(object):
                 self.messages += 1
                 for rule in msg.get('rules', []):
                     n = self.rules.setdefault(rule, 0)
+                    print(rule)
                     self.rules[rule] = n + 1
 
             except Queue.Empty:

@@ -4,6 +4,7 @@ import smtplib
 import os
 import Queue
 import threading
+import re
 from glob import glob
 
 from datetime import datetime
@@ -12,6 +13,7 @@ from connector import SAConnector
 from stats import BeanCounter
 
 STORE_PREFIX_FORMAT = '%Y%m%d_'
+TESTS_re = re.compile("tests=([A-Z0-9_\,]+)")
 logger = logging.getLogger('surgat')
 
 
@@ -62,8 +64,6 @@ class SurgatMailServer(SMTPServer):
             thd = threading.Thread(target=stats.start)
             thd.daemon = True
             thd.start()
-            logger.info("Rule statistics will be reported every {} minutes".
-                        format(self.config.get('stats_report_interval', 60)))
 
     def check_store(self):
         if 'store_directory' not in self.config:
@@ -127,49 +127,46 @@ class SurgatMailServer(SMTPServer):
 
             spam_opts['user'] = msg[2]
             cx = SAConnector(**spam_opts)
-
             body = msg[3]
-            if cx.check_ping():
-                rv = cx.check(msg[3])
-
-                if rv.get('code') == 0:
+ 
+            # Avoid creating multiple connections to spamd by using a single call as
+            # spamC creates a connection with each call.
+            rv = cx.check(msg[3])           
+            if rv.get('code') == 0:
+                hdrs = rv.get('headers', [])
+                if len(hdrs) > 0:
+                    body = "\r\n".join(hdrs) + "\r\n" + body
+                    # Record the rules used by examining the headers to avoid another call.
                     if self.stats_q is not None:
-                        self.stats_q.put({'rules': cx.rule_list(msg[3])})
+                        for h in hdrs:
+                            ck = TESTS_re.search(h.replace("\r", "").replace("\n", "").replace("\t", ""))
+                            if ck is not None:
+                                self.stats_q.put({'rules': ck.group(1).split(',')})
 
-                    if rv.get('isspam', False) is True:
-                        if 'kill_level' in self.config and rv.get('score') >= self.config['kill_level']:
-                            my_logger.info("Dropping message to {} from {} due score of {}".
-                                           format(msg[2], msg[1], rv.get("score")))
-                            continue
-                        # log rules here?
-
-                    if len(rv.get('headers', [])) > 0:
-                        body = "\r\n".join(rv.get('headers', [])) + "\r\n" + body
-
-                    if self.is_filtered(rv.get('result'), rv.get('score'), msg[1]):
-                        self.store_msg(body, False, True)
-                else:
-                    msg = "spamd error processing message (return code {}) - ".format(rv.get('code'))
-                    if self.config.get('forward_on_error', False) is False:
-                        my_logger.warn(msg + "message stored".
-                                       format(rv.get('code')))
-                        self.store_msg(msg[3])
+                if rv.get('isspam', False) is True:
+                    if 'kill_level' in self.config and rv.get('score') >= self.config['kill_level']:
+                        my_logger.info("Dropping message to {} from {} due score of {}".
+                                       format(msg[2], msg[1], rv.get("score")))
                         continue
-                    my_logger.warn(msg + "forwarding message due forward_on_error set")
 
+                if self.is_filtered(rv.get('result'), rv.get('score'), msg[1]):
+                    self.store_msg(body, False, True)
             else:
+                msg = "spamd error processing message (return code {}) - ".format(rv.get('code'))
                 if self.config.get('forward_on_error', False) is False:
-                    my_logger.warn("Unable to connect to spamd, storing the message")
+                    my_logger.warn(msg + "message stored".
+                                   format(rv.get('code')))
                     self.store_msg(msg[3])
                     continue
-                else:
-                    my_logger.warn("Unable to contact spamd, but forwarding message due forward_on_error setting")
+
+                my_logger.warn(msg + "forwarding message due forward_on_error set")
 
             try:
+                my_logger.info("forwarding message to {}".format(msg[2]))
                 server = smtplib.SMTP(*self.config['forward'])
                 server.sendmail(msg[1], msg[2], body)
                 server.quit()
-                my_logger.info("message to {} forwarded".format(msg[2]))
             except:
                 self.store_msg(body, True)
                 my_logger.warn("Unable to forward message, stored...")
+
