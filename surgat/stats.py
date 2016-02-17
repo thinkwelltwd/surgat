@@ -27,7 +27,6 @@ class BeanCounter(object):
                 self.messages += 1
                 for rule in msg.get('rules', []):
                     n = self.rules.setdefault(rule, 0)
-                    print(rule)
                     self.rules[rule] = n + 1
 
             except Queue.Empty:
