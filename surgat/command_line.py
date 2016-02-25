@@ -26,6 +26,24 @@ def filesize(sz):
     return sz
 
 
+def interval(i):
+    """ Return a (possible) string value as minutes... """
+    i = i.strip().replace(' ', '')
+    if i is int:
+        return i
+    ck = re.search("([0-9]+)([a-zA-Z]+)", i)
+    if ck is None:
+        return int(i)
+    n = int(ck.group(1))
+    if ck.group(2).lower() in ['s', 'sec', 'secs']:
+        return min(1, math.floor(n * 60))
+    if ck.group(2).lower() in ['h', 'hr', 'hrs', 'hour', 'hours']:
+        return n * 60
+    if ck.group(2).lower() in ['d', 'day', 'days']:
+        return n * 24 * 60
+    return i
+
+
 def check_directory(cfg_fn, directory_path):
     if not os.path.isabs(directory_path):
         return os.path.join(os.path.abspath(os.path.dirname(cfg_fn)), directory_path)
@@ -83,6 +101,8 @@ def config_dict_from_parser(cfg_fn):
 
     if 'max_size' in cfg_dict:
         cfg_dict['max_size'] = filesize(cfg_dict['max_size'])
+    if 'stats_report_interval' in cfg_dict:
+        cfg_dict['stats_report_interval'] = interval(cfg_dict['stats_report_interval'])
     if 'store_directory' in cfg_dict:
         cfg_dict['store_directory'] = check_directory(cfg_fn, cfg_dict['store_directory'])
     return cfg_dict
