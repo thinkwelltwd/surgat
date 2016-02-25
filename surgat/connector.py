@@ -7,10 +7,11 @@ logger = logging.getLogger('surgat.SAConnector')
 
 def spamd_headers_for_message(data):
     rv = []
+    is_spam = data.get('isspam', False)
     for k in data.get('headers', []):
-        if not k.startswith('X-Spam'):
+        if not is_spam and k not in ['X-Spam-Status', 'X-Spam-Checker-Version']:
             continue
-        if not data.get('isspam', False) and k not in ['X-Spam-Status', 'X-Spam-Checker-Version']:
+        if not k.startswith('X-Spam') or k == 'Subject':
             continue
         rv.append('{}: {}'.format(k, data['headers'][k]))
     return rv
@@ -19,6 +20,7 @@ def spamd_headers_for_message(data):
 class SAConnector(object):
     def __init__(self, server='localhost', port=783, user=None):
         """ A connection to spamd for the prvided user. """
+        logger.info("Establishing a connection to spamd...")
         self.client = SpamC(server, port, user=user)
 
     def check_ping(self):
