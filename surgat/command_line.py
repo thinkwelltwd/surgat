@@ -4,11 +4,15 @@ import sys
 import ConfigParser
 import asyncore
 import re
+from daemonize import Daemonize
 
 from __init__ import __version__
 from logs import get_surgat_logger
 from replay import ReplayMessage
 from surgat import SurgatMailServer
+
+
+startup_options = []
 
 
 def filesize(sz):
@@ -105,7 +109,25 @@ def config_dict_from_parser(cfg_fn):
         cfg_dict['stats_report_interval'] = interval(cfg_dict['stats_report_interval'])
     if 'store_directory' in cfg_dict:
         cfg_dict['store_directory'] = check_directory(cfg_fn, cfg_dict['store_directory'])
+    cfg_dict['cfg_fn'] = cfg_fn
     return cfg_dict
+
+
+def do_start():
+    logger = get_surgat_logger()
+    if len(startup_options) < 3:
+        logger.error("Incorrect number of startup options provided???")
+        return
+    cfg_data = config_dict_from_parser(startup_options[0])
+    cfg_data.update({'do_filter': startup_options[1], 'collect_stats': startup_options[2]})
+
+    logger.info("Starting surgat version {} using configuration from {}".format(__version__, cfg_data['cfg_fn']))
+    sms = SurgatMailServer(cfg_data)
+    sms.start()
+    try:
+        asyncore.loop()
+    except KeyboardInterrupt:
+        pass
 
 
 def main():
@@ -116,29 +138,26 @@ def main():
     parser.add_argument('--config', action='store', default='/usr/local/etc/surgat.conf',
                         help='Configuration file to use')
     parser.add_argument('--version', action='store_true', help='Show version and exit')
+    parser.add_argument('--daemonize', action='store_true', help='Daemonize surgat')
+    parser.add_argument('--pid', default='./surgat.pid', help='PID file to use')
     args = parser.parse_args()
 
     if args.version:
         print("surgat version {}".format(__version__))
         sys.exit(0)
 
-    logger = get_surgat_logger('DEBUG' if args.verbose else 'INFO')
-
     if not os.path.exists(args.config):
         print("The config file '{}' does not exist. Unable to continue.".format(args.config))
         sys.exit(0)
 
-    logger.info("Starting surgat version {} using configuration from {}".format(__version__, args.config))
-
-    cfg_data = config_dict_from_parser(args.config)
-    cfg_data.update({'cfg_fn': args.config, 'do_filter': args.filter, 'collect_stats': args.collect_stats})
-
-    sms = SurgatMailServer(cfg_data)
-    sms.start()
-    try:
-        asyncore.loop()
-    except KeyboardInterrupt:
-        pass
+    logger = get_surgat_logger('DEBUG' if args.verbose else 'INFO')
+    startup_options.extend([args.config, args.filter, args.collect_stats])
+    if args.daemonize:
+        logger.info("Starting as daemon")
+        daemon = Daemonize(app='surgat', pid=args.pid, action=do_start, logger=logger)
+        daemon.start()
+        sys.exit(0)
+    do_start()
     logger.info("shutting down")
 
 

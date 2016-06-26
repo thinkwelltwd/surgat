@@ -2,8 +2,6 @@ from setuptools import setup, find_packages
 from os import path
 from surgat import __version__
 import io
-import os
-import sys
 from glob import glob
 
 
@@ -37,6 +35,6 @@ setup(
         'console_scripts': ['surgat=surgat.command_line:main',
                             'surgat-replay=surgat.command_line:replay']
     },
-    install_requires = ['spamc']
+    install_requires=['spamc', 'daemonize']
 )
 

@@ -1,0 +1,71 @@
+#! /bin/sh
+#
+# surgat      start/stop the transparent spamd proxy for incoming mail.
+#             (priority should be smaller than that of postfix)
+#
+# NB This is NOT for systemd
+#
+# Author:	(c)2014 David Reid <zathrasorama@gmail.com>
+#           Based on Debian sarge's 'skeleton' example
+#           Distribute and/or modify at will.
+#
+### BEGIN INIT INFO
+# Provides:          surgat
+# Required-Start:    $syslog $local_fs $remote_fs
+# Required-Stop:     $syslog $local_fs $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start/stop the surgat daemon
+### END INIT INFO
+
+set -e
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+DAEMON=/usr/local/bin/surgat
+SQLGREY_HOME=/var/lib/sqlgrey
+NAME=surgat
+DESC="postfix spamd transparent proxy (surgat)"
+CONFIG=/usr/local/etc/surgat.conf
+
+PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/$NAME
+
+# Gracefully exit if the package has been removed.
+test -x $DAEMON || exit 0
+
+# Read config file if it is present.
+if [ -r /etc/default/$NAME ]
+then
+    . /etc/default/$NAME
+fi
+
+case "$1" in
+  start)
+	echo -n "Starting $DESC: $NAME"
+	start-stop-daemon --start --quiet --pidfile $PIDFILE \
+		--exec $DAEMON -- --config $CONFIG --pid $PIDFILE \
+		--daemonize $SURGAT_OPTS
+	echo "."
+	;;
+  stop)
+	echo -n "Stopping $DESC: $NAME"
+	start-stop-daemon --stop --pidfile $PIDFILE
+        rm -f $PIDFILE
+	echo "."
+	;;
+  restart)
+	echo -n "Restarting $DESC: $NAME"
+	start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE
+        rm -f $PIDFILE
+	sleep 1
+	start-stop-daemon --start --quiet --pidfile $PIDFILE \
+		--exec $DAEMON -- --config $CONFIG --daemonize $SURGAT_OPTS
+	echo "."
+	;;
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart}" >&2
+	exit 1
+	;;
+esac
+
+exit 0
